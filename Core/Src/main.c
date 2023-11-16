@@ -141,6 +141,9 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+
+    HAL_GPIO_TogglePin(STATUS_GPIO_Port, STATUS_Pin);
+    HAL_Delay(100);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -909,6 +912,7 @@ void Error_Handler(void)
   __disable_irq();
   while (1)
   {
+    
   }
   /* USER CODE END Error_Handler_Debug */
 }

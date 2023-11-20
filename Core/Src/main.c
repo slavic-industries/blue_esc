@@ -115,7 +115,7 @@ float cur_pos_rad = 0.0;
 float prev_pos_rad = 0.0;
 float delta_pos_rad = 0.0;
 float alpha_vel = 0.95;
-static float cur_velocity = 0.0;
+float cur_velocity = 0.0;
 float pos_rad = 0.0;
 static float const bit_to_radians_ratio = 2*M_PI/4096.0f;
 static float const max_radians = 2*M_PI/4096.0f*4095.0f;
@@ -217,7 +217,7 @@ int main(void)
     HAL_GPIO_TogglePin(STATUS_GPIO_Port, STATUS_Pin);
     HAL_Delay(1);
 
-    HAL_Serial_Print(&serial,"%d\n", delta_pos_time_us);
+    HAL_Serial_Print(&serial,"%f\n", (float)cur_velocity);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

@@ -21,7 +21,15 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "serial.h"
+#include <math.h>
+#ifndef M_PI
+  #define M_PI 3.14159265358979323846
+#endif
 
+#ifndef M_2PI
+  #define M_2PI 6.2831853071795865
+#endif
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -65,6 +73,9 @@ DMA_HandleTypeDef hdma_usart2_tx;
 
 /* USER CODE BEGIN PV */
 
+HAL_Serial_Handler serial;
+
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -89,6 +100,60 @@ static void MX_CORDIC_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+
+float freq = 0.0;
+float duty = 0.0;
+uint16_t pos = 0.0;
+uint32_t cl = 0;
+uint32_t ch = 0;
+int32_t current_revolution = 0;
+uint16_t cur_pos_time_us = 0;
+uint16_t prev_pos_time_us = 0;
+uint16_t delta_pos_time_us = 0;
+float cur_pos_rad = 0.0;
+float prev_pos_rad = 0.0;
+float delta_pos_rad = 0.0;
+float alpha_vel = 0.95;
+static float cur_velocity = 0.0;
+float pos_rad = 0.0;
+static float const bit_to_radians_ratio = 2*M_PI/4096.0f;
+static float const max_radians = 2*M_PI/4096.0f*4095.0f;
+
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
+{
+	if(htim->Instance == TIM4)
+  {
+    cur_pos_time_us = __HAL_TIM_GET_COUNTER(&htim6);
+
+    cl = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
+		ch = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
+		duty = (float) ch / cl;
+    pos = (uint16_t) 4096.0 * duty;
+
+    cur_pos_rad = (float)pos * bit_to_radians_ratio;
+
+    delta_pos_rad = cur_pos_rad - prev_pos_rad;
+
+    if(delta_pos_rad > M_PI)
+    {
+      delta_pos_rad -= M_2PI;
+    }
+    if(delta_pos_rad < -M_PI)
+    {
+      delta_pos_rad += M_2PI;
+    }
+
+    delta_pos_time_us = cur_pos_time_us - prev_pos_time_us;
+
+    cur_velocity = alpha_vel * cur_velocity + (1 - alpha_vel) * (delta_pos_rad / delta_pos_time_us) * 1000000.0;
+
+    prev_pos_rad = cur_pos_rad;
+    prev_pos_time_us = cur_pos_time_us;
+
+  }
+}
+
 
 /* USER CODE END 0 */
 
@@ -135,6 +200,13 @@ int main(void)
   MX_CORDIC_Init();
   /* USER CODE BEGIN 2 */
 
+  HAL_TIM_Base_Start(&htim6); // 1us base timer
+   HAL_Serial_Init(&huart2,&serial);
+   
+
+  HAL_TIM_IC_Start_IT(&htim4, TIM_CHANNEL_1); // Primary channel - rising edge
+  HAL_TIM_IC_Start(&htim4, TIM_CHANNEL_2);    // Secondary channel - falling edge
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -143,11 +215,14 @@ int main(void)
   {
 
     HAL_GPIO_TogglePin(STATUS_GPIO_Port, STATUS_Pin);
-    HAL_Delay(100);
+    HAL_Delay(1);
+
+    HAL_Serial_Print(&serial,"%d\n", delta_pos_time_us);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
   }
+ 
   /* USER CODE END 3 */
 }
 

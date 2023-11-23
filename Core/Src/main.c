@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include "serial.h"
 #include <math.h>
+#include <string.h>
 #ifndef M_PI
   #define M_PI 3.14159265358979323846
 #endif
@@ -101,6 +102,14 @@ static void MX_CORDIC_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+#define COUNTS_PER_FULL_REVOLUTION 4096.0
+#define COUNTS_PER_HALF_REVOLUTION 2048.0
+#define TIMER_4_FREQUENCY 160000000 / 3.0
+#define TRACK_BW 100
+#define KP 2.0f * TRACK_BW
+#define KI 0.25f * KP * KP
+
+
 
 float freq = 0.0;
 float duty = 0.0;
@@ -120,40 +129,100 @@ float pos_rad = 0.0;
 static float const bit_to_radians_ratio = 2*M_PI/4096.0f;
 static float const max_radians = 2*M_PI/4096.0f*4095.0f;
 
+volatile float measured_position_cnts = 0.0;
+volatile float delta_position_measured_cnts = 0.0;
+volatile float estimated_position_wrapped_cnts = 0.0;
+volatile float velocity_estimate = 0.0;
+volatile float delta_position_estimate_cnts = 0.0;
+volatile float delta_position_error = 0.0;
+volatile float position_increment = 0.0;
+volatile float encoder_pwm_frequency = 0.0;
+volatile float PWM_PERIOD = 0.0;
+volatile int32_t position_sector = 0;
+
+// struct observer{
+//   estimated_valocity;
+// };
+
+
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
 {
 	if(htim->Instance == TIM4)
   {
-    cur_pos_time_us = __HAL_TIM_GET_COUNTER(&htim6);
+    // cur_pos_time_us = __HAL_TIM_GET_COUNTER(&htim6);
+
+    // cl = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
+		// ch = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
+		// duty = (float) ch / cl;
+    // pos = (uint16_t) 4096.0 * duty;
+
+    // cur_pos_rad = (float)pos * bit_to_radians_ratio;
+
+    // delta_pos_rad = cur_pos_rad - prev_pos_rad;
+
+    // if(delta_pos_rad > M_PI)
+    // {
+    //   delta_pos_rad -= M_2PI;
+    // }
+    // if(delta_pos_rad < -M_PI)
+    // {
+    //   delta_pos_rad += M_2PI;
+    // }
+
+    // delta_pos_time_us = cur_pos_time_us - prev_pos_time_us;
+
+    // cur_velocity = alpha_vel * cur_velocity + (1 - alpha_vel) * (delta_pos_rad / delta_pos_time_us) * 1000000.0;
+
+    // prev_pos_rad = cur_pos_rad;
+    // prev_pos_time_us = cur_pos_time_us;
+
+    ///////////////////////////////
+    ///////////////////////////////
+    ///////////////////////////////
 
     cl = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1);
 		ch = HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2);
-		duty = (float) ch / cl;
-    pos = (uint16_t) 4096.0 * duty;
 
-    cur_pos_rad = (float)pos * bit_to_radians_ratio;
+    encoder_pwm_frequency = TIMER_4_FREQUENCY /  cl;
+    PWM_PERIOD = 1 / encoder_pwm_frequency;
 
-    delta_pos_rad = cur_pos_rad - prev_pos_rad;
-
-    if(delta_pos_rad > M_PI)
+    measured_position_cnts = COUNTS_PER_FULL_REVOLUTION * ch / cl;
+    delta_position_measured_cnts = measured_position_cnts - estimated_position_wrapped_cnts;
+    if(delta_position_measured_cnts < -COUNTS_PER_HALF_REVOLUTION)
     {
-      delta_pos_rad -= M_2PI;
+      delta_position_measured_cnts += COUNTS_PER_FULL_REVOLUTION;
     }
-    if(delta_pos_rad < -M_PI)
+    else if(delta_position_measured_cnts >= COUNTS_PER_HALF_REVOLUTION)
     {
-      delta_pos_rad += M_2PI;
+      delta_position_measured_cnts -= COUNTS_PER_FULL_REVOLUTION;
     }
-
-    delta_pos_time_us = cur_pos_time_us - prev_pos_time_us;
-
-    cur_velocity = alpha_vel * cur_velocity + (1 - alpha_vel) * (delta_pos_rad / delta_pos_time_us) * 1000000.0;
-
-    prev_pos_rad = cur_pos_rad;
-    prev_pos_time_us = cur_pos_time_us;
-
+    delta_position_estimate_cnts = PWM_PERIOD * velocity_estimate;
+    delta_position_error = delta_position_measured_cnts - delta_position_estimate_cnts;
+    position_increment = delta_position_estimate_cnts + (KP * PWM_PERIOD * delta_position_error);
+    estimated_position_wrapped_cnts += position_increment;
+    if(estimated_position_wrapped_cnts < 0)
+    {
+      estimated_position_wrapped_cnts += COUNTS_PER_FULL_REVOLUTION;
+      position_sector -= 1;
+    }
+    else if(estimated_position_wrapped_cnts >= COUNTS_PER_FULL_REVOLUTION)
+    {
+      estimated_position_wrapped_cnts -= COUNTS_PER_FULL_REVOLUTION;
+      position_sector += 1;
+    }
+    velocity_estimate += PWM_PERIOD * KI * delta_position_error;
   }
+
+  uint8_t data[100] = {0};
+  sprintf(data, "Speed = %f \r\n", velocity_estimate);
+  HAL_UART_Transmit(&huart2, data, sizeof(data), 1);
 }
 
+
+float get_speed()
+{
+  return velocity_estimate;
+}
 
 /* USER CODE END 0 */
 
@@ -215,9 +284,13 @@ int main(void)
   {
 
     HAL_GPIO_TogglePin(STATUS_GPIO_Port, STATUS_Pin);
-    HAL_Delay(1);
+    HAL_Delay(100);
 
-    HAL_Serial_Print(&serial,"%f\n", (float)cur_velocity);
+    // HAL_Serial_Print(&serial,"Speed = %f\n", get_speed());
+
+    // uint8_t data[100] = {0};
+    // sprintf(data, "Speed = %f \r\n", velocity_estimate);
+    // HAL_UART_Transmit(&huart2, data, sizeof(data), 1);
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

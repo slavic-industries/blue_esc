@@ -66,7 +66,8 @@ Drivers/STM32G4xx_HAL_Driver/Src/stm32g4xx_hal_tim_ex.c \
 Drivers/STM32G4xx_HAL_Driver/Src/stm32g4xx_hal_uart.c \
 Drivers/STM32G4xx_HAL_Driver/Src/stm32g4xx_hal_uart_ex.c \
 Core/Src/system_stm32g4xx.c  \
-Core/Src/serial.c
+Core/Src/serial.c \
+Core/Src/encoder.c
 
 # ASM sources
 ASM_SOURCES =  \

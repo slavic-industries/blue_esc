@@ -90,6 +90,31 @@ static void MX_CORDIC_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+
+
+uint16_t start_time = 0;
+uint16_t end_time = 0;
+uint16_t elapsed_time = 0;
+
+
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  if(htim->Instance == TIM1)
+  {
+    start_time = __HAL_TIM_GET_COUNTER(&htim6);
+    HAL_GPIO_TogglePin(STATUS_GPIO_Port, STATUS_Pin);
+
+    // ##################
+    // Put FOC Code Here
+    // ##################
+
+    end_time = __HAL_TIM_GET_COUNTER(&htim6);
+  }
+}
+
+
+
 /* USER CODE END 0 */
 
 /**
@@ -135,6 +160,16 @@ int main(void)
   MX_CORDIC_Init();
   /* USER CODE BEGIN 2 */
 
+  // 1*10^(-7)s Base Timer Begin (used for time calculation)
+  HAL_TIM_Base_Start(&htim6); 
+
+
+  // PWM Begin
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
+  HAL_TIM_Base_Start_IT(&htim1);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -142,8 +177,8 @@ int main(void)
   while (1)
   {
 
-    HAL_GPIO_TogglePin(STATUS_GPIO_Port, STATUS_Pin);
-    HAL_Delay(100);
+    elapsed_time = end_time - start_time;
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -634,9 +669,9 @@ static void MX_TIM1_Init(void)
   {
     Error_Handler();
   }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_OC1REF;
   sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_RESET;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_ENABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
   {
     Error_Handler();
@@ -766,7 +801,7 @@ static void MX_TIM6_Init(void)
 
   /* USER CODE END TIM6_Init 1 */
   htim6.Instance = TIM6;
-  htim6.Init.Prescaler = 159;
+  htim6.Init.Prescaler = 15;
   htim6.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim6.Init.Period = 65535;
   htim6.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;

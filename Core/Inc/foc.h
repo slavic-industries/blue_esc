@@ -1,6 +1,9 @@
 #ifndef FOC_H
 #define FOC_H
 
+#include "stm32g4xx_hal.h"
+#include "math.h"
+
 struct foc_data
 {
     float pos_m_ref;
@@ -22,7 +25,8 @@ struct foc_data
     float iq_ff;
     float iq_kp;
     float iq_ki;
-    float ip_sum;
+    float iq_sum;
+    float iq_integrator;
     
     float id_ref;
     float id_est;
@@ -31,6 +35,7 @@ struct foc_data
     float id_kp;
     float id_ki;
     float id_sum;
+    float id_integrator;
 
     float v_q;
     float v_d;
@@ -51,11 +56,20 @@ struct foc_data
 
     float pos_e_est;
     
-    const float sqrt_3;
+    float sqrt_3;
+
+    uint32_t t_delta;
+    uint32_t t_prev;
+    
 };
 
 
-void clarke_transform(struct foc_data* data);
-void park_transform(struct foc_data* data);
+void clarke_transform();
+void park_transform();
 
+void inverse_clarke_transrorm();
+void inverse_park_transrorm();
+
+void init_foc();
+void curretn_foc_update();
 #endif

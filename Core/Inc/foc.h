@@ -7,6 +7,9 @@
 #define MIN_PWM_DUTY_CYCLE 0.02f
 #define MAX_PWM_DUTY_CYCLE 0.98f
 
+#define ALPHA_CURRENT_SENSE_OFFSET 0.001f
+
+
 struct foc_data
 {
     float pos_m_ref;
@@ -60,6 +63,10 @@ struct foc_data
     float pos_e_est;
 
     float motor_bus_voltage;
+    float alpha_voltage;
+    float motor_bus_voltage_adc;
+
+    uint16_t motor_current_input_adc[3];
 
     // Constants
     float sqrt_3;
@@ -82,5 +89,5 @@ void pwm_generation();
 
 void motor_bus_voltage_calculation();
 
-void foc_interrupt(ADC_HandleTypeDef *hadc);
+void adc_interrupt(ADC_HandleTypeDef *hadc);
 #endif

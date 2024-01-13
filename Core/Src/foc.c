@@ -1,19 +1,27 @@
 #include "foc.h"
+#include "main.h"
 
 static struct foc_data controller;
 
 volatile uint16_t ADC1_DMA[5] = {0, 0, 0, 0, 0}; // Dummy conversion (ST workaround for -x),
 volatile uint16_t ADC2_DMA[3] = {0, 0, 0};       // Dummy conversion (ST workaround for -x)
+static float motor_current_input_adc_offset[3] = {2464.0f,2482.0f,2485.0f};
+static int32_t current_samples = 0;
 
 extern TIM_HandleTypeDef htim1;
 extern TIM_HandleTypeDef htim6;
 extern ADC_HandleTypeDef hadc1;
 extern ADC_HandleTypeDef hadc2;
+extern DMA_HandleTypeDef hdma_adc1;
+extern DMA_HandleTypeDef hdma_adc2;
 extern OPAMP_HandleTypeDef hopamp1;
 extern OPAMP_HandleTypeDef hopamp2;
 extern OPAMP_HandleTypeDef hopamp3;
 
-void init_foc(struct foc_data *data)
+// extern GPIO_TypeDef * STATUS_GPIO_Port;
+// extern uint16_t STATUS_Pin;
+
+void init_foc()
 {
     controller.pos_m_ref = 0.0;
     controller.pos_m_est = 0.0;
@@ -61,6 +69,12 @@ void init_foc(struct foc_data *data)
     controller.pos_e_est = 0.0;
 
     controller.motor_bus_voltage = 0.0f;
+    controller.alpha_voltage = 0.01f;
+    controller.motor_bus_voltage_adc = 0.0f;
+
+    controller.motor_current_input_adc[0] = 0;
+    controller.motor_current_input_adc[1] = 0;
+    controller.motor_current_input_adc[2] = 0;
 
     controller.sqrt_3 = sqrt(3.0f);
 
@@ -81,13 +95,15 @@ void init_foc(struct foc_data *data)
     HAL_OPAMP_Start(&hopamp1);
     HAL_OPAMP_Start(&hopamp2);
     HAL_OPAMP_Start(&hopamp3);
-    HAL_ADC_Start_DMA(&hadc1, (uint32_t *)ADC1_DMA, 5);
-    HAL_ADC_Start_DMA(&hadc2, (uint32_t *)ADC2_DMA, 3);
+    HAL_ADC_Start_DMA(&hdma_adc1, (uint32_t *)ADC1_DMA, 5);
+    HAL_ADC_Start_DMA(&hdma_adc2, (uint32_t *)ADC2_DMA, 3);
+
+    // HAL_GPIO_TogglePin(STATUS_GPIO_Port, STATUS_Pin);
 }
 
 void current_foc_update()
 {
-    const uint32_t t_now = htim6->CNT;
+    const uint32_t t_now = (htim6).Instance->CNT;
     controller.t_delta = t_now - controller.t_prev;
     controller.t_prev = t_now;
 
@@ -157,21 +173,21 @@ void motor_bus_voltage_calculation()
     // process input voltage (STM32G431-ESC1 specific)
     static float const R68 = 169.0f; // kohm
     static float const R76 = 18.0f;  // kohm
-    static float const alpha_voltage = 0.01f;
-    controller.motor_bus_voltage = (vbus_input_adc / 4096.0f * 3.3f * (R68 + R76) / R76) * alpha_voltage + (1.0f - alpha_voltage) * present_voltage_V;
+    // static float const alpha_voltage = 0.01f;
+    controller.motor_bus_voltage = (controller.motor_bus_voltage_adc / 4096.0f * 3.3f * (R68 + R76) / R76) * controller.alpha_voltage + (1.0f - controller.alpha_voltage) * controller.motor_bus_voltage;
 }
 
-void foc_interrupt(ADC_HandleTypeDef *hadc)
+void adc_interrupt(ADC_HandleTypeDef *hadc)
 {
     if (hadc == &hadc1)
     {
         if (__HAL_TIM_IS_TIM_COUNTING_DOWN(&htim1))
         {
             // Filter (EWMA) position and voltage ADC samples
-            motor_current_input_adc[0] = ADC1_DMA[1];
-            potentiometer_input_adc = ADC1_DMA[2];
-            vbus_input_adc = ADC1_DMA[3];
-            temperature_input_adc = ADC1_DMA[4];
+            controller.motor_current_input_adc[0] = ADC1_DMA[1];
+            // potentiometer_input_adc = ADC1_DMA[2];
+            controller.motor_bus_voltage_adc = ((float)ADC1_DMA[3]);
+            // temperature_input_adc = ADC1_DMA[4];
         }
         else
         {
@@ -185,8 +201,8 @@ void foc_interrupt(ADC_HandleTypeDef *hadc)
         if (__HAL_TIM_IS_TIM_COUNTING_DOWN(&htim1))
         {
             // Filter (EWMA) position and voltage ADC samples
-            motor_current_input_adc[1] = ADC2_DMA[1];
-            motor_current_input_adc[2] = ADC2_DMA[2];
+            controller.motor_current_input_adc[1] = ADC2_DMA[1];
+            controller.motor_current_input_adc[2] = ADC2_DMA[2];
             ++current_samples;
         }
         else
